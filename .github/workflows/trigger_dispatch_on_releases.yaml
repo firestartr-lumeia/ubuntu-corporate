@@ -1,0 +1,33 @@
+---
+# FEATURE_NAME: build_and_dispatch_docker_images
+# FEATURE_VERSION: build_and_dispatch_docker_images-v5.1.3
+# FEATURE_URL: https://github.com/prefapp/features/tree/build_and_dispatch_docker_images-v5.1.3/packages/build_and_dispatch_docker_images
+
+name: Trigger dispatches on releases
+run-name: Trigger dispatches on new release build
+
+on:
+  workflow_run:
+    workflows: ["Build Docker releases"]
+    types:
+      - completed
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  on-success:
+    runs-on: ubuntu-24.04
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - name: Dispatch image changes to state repos
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo 'The triggering workflow passed'
+          gh workflow run make_dispatches.yaml -R ${{ github.repository }} \
+          -f image_type=releases \
+          -f flavors='*' \
+          -f filter_by_env="pro" \
+          -f workflow_run_id="${{ github.event.workflow_run.id }}"
