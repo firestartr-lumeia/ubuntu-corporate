@@ -1,0 +1,41 @@
+---
+# FEATURE_NAME: build_and_dispatch_docker_images
+# FEATURE_VERSION: build_and_dispatch_docker_images-v5.1.3
+# FEATURE_URL: https://github.com/prefapp/features/tree/build_and_dispatch_docker_images-v5.1.3/packages/build_and_dispatch_docker_images
+
+name: Trigger dispatches on snapshot
+run-name: Trigger dispatches on new snapshots built at "${{ github.event.workflow_run.head_sha }}"
+
+on:
+  workflow_run:
+    workflows: ["Build Docker snapshots"]
+    types:
+      - completed
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  on-success:
+    runs-on: ubuntu-24.04
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event != 'workflow_dispatch' }}
+    steps:
+
+      - name: Calculate short SHA
+        id: calculate_sha
+        run: |
+          SHA_SHORT=$(cut -c 1-7 <<< '${{ github.event.workflow_run.head_sha }}')
+          echo "sha_short=$SHA_SHORT" >> "$GITHUB_OUTPUT"
+
+      - name: Dispatch image changes to state repos
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo 'The triggering workflow passed'
+          gh workflow run make_dispatches.yaml -R ${{ github.repository }} \
+          -f image_type=snapshots \
+          -f flavors='*' \
+          -f overwrite_version=${{ steps.calculate_sha.outputs.sha_short }} \
+          -f filter_by_env="dev" \
+          -f workflow_run_id="${{ github.event.workflow_run.id }}"
