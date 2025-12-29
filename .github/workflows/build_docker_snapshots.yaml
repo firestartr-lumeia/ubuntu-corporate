@@ -1,0 +1,57 @@
+---
+# FEATURE_NAME: build_and_dispatch_docker_images
+# FEATURE_VERSION: build_and_dispatch_docker_images-v5.1.3
+# FEATURE_URL: https://github.com/prefapp/features/tree/build_and_dispatch_docker_images-v5.1.3/packages/build_and_dispatch_docker_images
+
+name: Build Docker snapshots
+run-name: Generating snapshots images for flavors "${{ inputs.flavors || 'auto-build' }}" at ${{ inputs.from || github.event.pull_request.head.sha || github.sha }}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ inputs.from || github.event.pull_request.number }}
+  cancel-in-progress: true
+
+on:
+  workflow_dispatch:
+    inputs:
+      from:
+        type: string
+        description: Commit SHA or branch name to build
+        required: true
+        default: 'main'
+      flavors:
+        type: string
+        description: Flavor name/s | one (alone), several (separated by commas)
+        required: true
+        default: "*"
+
+  push:
+    branches:
+      - main
+
+  pull_request:
+    types: [opened, labeled, reopened, synchronize]
+    branches:
+      - main
+
+permissions:
+  id-token: write
+  contents: write
+  packages: write
+
+jobs:
+  build-docker-snapshots:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'autodeploy'))
+    uses: prefapp/firestarter-workflows/.github/workflows/build_images.yaml@v3
+    with:
+      type: snapshots
+      from: ${{ inputs.from || github.event.pull_request.head.sha || github.sha }}
+      flavors: ${{ inputs.flavors || '' }}
+      auth_strategy: aws_oidc
+      check_run_name: Firestartr Docker Images Summary
+      workflows_repo: prefapp/firestarter-workflows
+      workflows_repo_ref: v3
+    secrets:
+      FS_CHECKS_PEM_FILE: "${{ secrets.FS_CHECKS_PEM_FILE }}"
+      DOCKER_REGISTRY_SNAPSHOTS_CREDS: "${{ secrets.DOCKER_REGISTRY_SNAPSHOTS_CREDS }}"
+      DOCKER_REGISTRY_RELEASES_CREDS: "${{ secrets.DOCKER_REGISTRY_RELEASES_CREDS }}"
+      GITHUB_DOCKER_REGISTRY_CREDS: "${{secrets.GITHUB_DOCKER_REGISTRY_CREDS}}"
